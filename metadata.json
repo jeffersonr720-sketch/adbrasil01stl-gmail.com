@@ -1,0 +1,6 @@
+{
+  "name": "Escala Fácil - Gestão de Escalas e Voluntários",
+  "description": "Aplicativo web completo de gestão de escalas de voluntários, ministérios e cultos para igrejas, com exportação para WhatsApp, PDF e planilhas Excel.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
