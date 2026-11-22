@@ -1,5 +1,5 @@
--- Escala Fácil (AD Brasil) - Schema PostgreSQL para Supabase
--- Execute este script no SQL Editor do seu projeto Supabase.
+-- Escala Fácil (AD Brasil) - Schema PostgreSQL Atualizado para Supabase
+-- Execute este script no SQL Editor do seu projeto Supabase (ou use setup_projeto_novo.sql para criar tabelas + dados iniciais de uma só vez).
 
 create table if not exists public.app_settings (
   id text primary key,
@@ -58,7 +58,7 @@ create table if not exists public.leaders (
   ministry_id text,
   active boolean not null default true,
   password_hash text not null,
-  created_at bigint not null,
+  created_at bigint not null default (extract(epoch from now()) * 1000)::bigint,
   last_login_at bigint
 );
 
@@ -71,7 +71,7 @@ create table if not exists public.password_resets (
   contact_note text not null default '',
   code_hash text,
   status text not null check (status in ('pending', 'code_issued', 'completed')),
-  created_at bigint not null,
+  created_at bigint not null default (extract(epoch from now()) * 1000)::bigint,
   expires_at bigint
 );
 
@@ -81,22 +81,23 @@ create table if not exists public.notifications (
   ministry_id text,
   title text not null,
   message text not null,
-  target_tab text not null default 'schedules',
+  target_tab text not null default 'schedules' check (target_tab in ('dashboard', 'schedules', 'services', 'ministries', 'members', 'attendance')),
   target_id text,
   actor_name text not null default 'Coordenação Geral',
   read_by jsonb not null default '[]'::jsonb,
-  created_at bigint not null
+  created_at bigint not null default (extract(epoch from now()) * 1000)::bigint
 );
 
 create index if not exists idx_members_ministry on public.members (ministry_id);
 create index if not exists idx_schedules_date on public.schedules (date_iso desc);
-create index if not exists idx_leaders_login on public.leaders (lower(login));
+create index if not exists idx_schedules_service on public.schedules (service_id);
+create unique index if not exists idx_leaders_login_unique on public.leaders (lower(login));
 create index if not exists idx_leaders_ministry on public.leaders (ministry_id);
 create index if not exists idx_password_resets_leader on public.password_resets (leader_id, created_at desc);
 create index if not exists idx_notifications_created on public.notifications (created_at desc);
 create index if not exists idx_notifications_ministry on public.notifications (ministry_id);
 
--- Habilita RLS para proteger acesso direto via anon key.
+-- Habilita RLS em todas as tabelas para bloquear acesso direto via anon key.
 -- O backend Express utiliza SUPABASE_SERVICE_ROLE_KEY com controle RBAC por departamento.
 alter table public.app_settings enable row level security;
 alter table public.ministries enable row level security;

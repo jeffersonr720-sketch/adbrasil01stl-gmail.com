@@ -47,7 +47,7 @@ let cachedServiceSignature = '';
 
 function cleanEnvString(value: unknown): string {
   if (typeof value !== 'string') return '';
-  const trimmed = value.trim();
+  const trimmed = value.trim().replace(/^['"]|['"]$/g, '').trim();
   if (
     !trimmed ||
     trimmed.startsWith('MY_SUPABASE') ||

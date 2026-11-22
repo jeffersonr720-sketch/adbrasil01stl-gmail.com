@@ -105,10 +105,12 @@ async function startServer() {
   };
 
   app.get('/api/health', async (req, res) => {
+    const supabaseConfigured = isSupabaseConfigured();
+    const serviceRoleConfigured = isServiceRoleConfigured();
     const base = {
       ok: true,
-      storage: isSupabaseConfigured() ? 'supabase' : 'local',
-      serviceRoleConfigured: isServiceRoleConfigured()
+      storage: supabaseConfigured ? 'supabase' : 'local',
+      serviceRoleConfigured
     };
 
     if (req.query.deep !== '1') {
@@ -118,9 +120,21 @@ async function startServer() {
 
     const client = getSupabaseClient();
     if (!client) {
-      res.json({ ...base, connected: false, tables: [] });
+      res.json({
+        ...base,
+        connected: false,
+        writable: false,
+        activeMode: 'local_fallback',
+        hint: 'Configure SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY nos Segredos (Secrets).',
+        tables: []
+      });
       return;
     }
+
+    // Limpa cooldown temporário para validar o estado real no Supabase imediatamente
+    authRepo.resetSupabaseCooldown();
+    appDataStore.resetSupabaseCooldown();
+    notificationStore.resetSupabaseCooldown();
 
     // Garante inicialização padrão antes da checagem de contagem
     await Promise.allSettled([
@@ -175,8 +189,51 @@ async function startServer() {
       })
     );
 
-    const connected = tables.every((t) => t.ok);
-    res.json({ ...base, connected, tables });
+    const allTablesExist = tables.every((t) => t.ok);
+    const hasNetworkFailure = tables.some(
+      (t) =>
+        !t.ok &&
+        (t.errorCode === 'NETWORK_ERROR' ||
+          /fetch failed|enotfound|econnrefused|etimedout|network/i.test(t.errorMessage || ''))
+    );
+    const hasAuthFailure = tables.some(
+      (t) => !t.ok && /invalid api key|jwt|401|403/i.test(t.errorMessage || '')
+    );
+
+    const writable = allTablesExist && serviceRoleConfigured;
+    const activeMode = writable ? 'supabase' : 'local_fallback';
+    let hint: string | undefined;
+
+    if (hasNetworkFailure) {
+      hint =
+        'Não foi possível alcançar a URL do projeto Supabase (erro de rede/DNS ou projeto pausado/excluído). Verifique SUPABASE_URL nos Segredos.';
+    } else if (hasAuthFailure) {
+      hint =
+        'A chave do Supabase foi recusada (Invalid API key / JWT). Verifique SUPABASE_SERVICE_ROLE_KEY e SUPABASE_ANON_KEY nos Segredos.';
+    } else if (!allTablesExist) {
+      hint =
+        'Uma ou mais tabelas ainda não existem no projeto Supabase. Execute o arquivo supabase/setup_projeto_novo.sql no SQL Editor.';
+    } else if (!serviceRoleConfigured) {
+      hint =
+        'As tabelas existem, mas SUPABASE_SERVICE_ROLE_KEY ainda não está configurada. Como o RLS protege as tabelas, adicione SUPABASE_SERVICE_ROLE_KEY nos Segredos para ativar leitura e gravação reais.';
+    }
+
+    let urlHost: string | null = null;
+    try {
+      urlHost = process.env.SUPABASE_URL ? new URL(process.env.SUPABASE_URL).host : null;
+    } catch {
+      urlHost = null;
+    }
+
+    res.json({
+      ...base,
+      urlHost,
+      connected: allTablesExist,
+      writable,
+      activeMode,
+      ...(hint ? { hint } : {}),
+      tables
+    });
   });
 
   app.post('/api/auth/login', async (req, res) => {

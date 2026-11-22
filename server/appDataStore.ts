@@ -61,6 +61,10 @@ export class AppDataStore {
     this.overrideClient = options.supabaseClient;
   }
 
+  resetSupabaseCooldown(): void {
+    this.missingTableUntil = 0;
+  }
+
   private getClient(): SupabaseClient | null {
     if (Date.now() < this.missingTableUntil) {
       return null;
